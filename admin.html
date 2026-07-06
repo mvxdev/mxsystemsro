@@ -394,6 +394,107 @@ tr:hover td{background:var(--sf);}
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ═══ SUPABASE ═══
+const SB_URL = 'https://jkehyvlmdqbjajfoedie.supabase.co';
+const SB_KEY = 'sb_publishable_T9GXe53o17dh3LxZj5RGcQ_1fOZ_Zzn';
+const sb = supabase.createClient(SB_URL, SB_KEY);
+let sbConvs = [];
+
+async function sbLoad() {
+  try {
+    const { data: convs } = await sb.from('conversations').select('*').order('updated_at', { ascending: false }).limit(50);
+    const { data: msgs } = await sb.from('messages').select('*').order('created_at', { ascending: true }).limit(1000);
+    const { data: books } = await sb.from('bookings').select('*');
+    const msgsByConv = {};
+    (msgs || []).forEach(m => {
+      (msgsByConv[m.conversation_id] = msgsByConv[m.conversation_id] || []).push({
+        role: m.role === 'admin' ? 'bot' : m.role,
+        text: m.role === 'admin' ? '👨‍⚕️ Administrator: ' + m.text : m.text,
+        time: new Date(m.created_at).toLocaleTimeString('ro', { hour: '2-digit', minute: '2-digit' })
+      });
+    });
+    const bookByConv = {};
+    (books || []).forEach(b => { bookByConv[b.conversation_id] = b; });
+    sbConvs = (convs || []).filter(c => (msgsByConv[c.id] || []).length > 0).map(c => {
+      const bk = bookByConv[c.id];
+      return {
+        id: 'sb_' + c.id,
+        sbId: c.id,
+        sbStatus: c.status,
+        name: c.patient_name || (bk && bk.name) || 'Vizitator',
+        phone: c.patient_phone || (bk && bk.phone) || '—',
+        service: (bk && bk.service) || 'Dialog',
+        time: (bk && bk.time) || '—',
+        status: bk ? (bk.status || 'new') : (c.status === 'human' ? 'dialog' : 'dialog'),
+        channel: c.channel || 'widget',
+        lang: c.lang || 'ro',
+        createdAt: new Date(c.updated_at || c.created_at),
+        conversation: msgsByConv[c.id] || []
+      };
+    });
+  } catch(e) { console.warn('sbLoad', e); }
+}
+
+async function sbTakeOver(convId, take) {
+  try {
+    await sb.from('conversations').update({ status: take ? 'human' : 'ai' }).eq('id', convId);
+    await sbLoad(); mergeAndRender();
+  } catch(e) { console.warn('takeover', e); }
+}
+
+async function sbAdminSend(convId) {
+  const inp = document.getElementById('adm-reply-inp');
+  if (!inp || !inp.value.trim()) return;
+  const text = inp.value.trim();
+  inp.value = '';
+  try {
+    await sb.from('messages').insert({ conversation_id: convId, role: 'admin', text });
+    await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', convId);
+  } catch(e) { console.warn('adminSend', e); }
+}
+
+function mergeAndRender() {
+  updateStats(); renderList();
+  if (currentId) showDetail(currentId);
+}
+
+// Realtime: любое изменение → перезагрузка
+sb.channel('admin-live')
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, async () => { await sbLoad(); mergeAndRender(); })
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, async () => { await sbLoad(); mergeAndRender(); })
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, async () => { await sbLoad(); mergeAndRender(); })
+  .subscribe();
+
+// ═══ CHAT TAKEOVER UI ═══
+function injectChatControls(id) {
+  const b = allBookings.find(x => x.id === id);
+  if (!b || !b.sbId) return; // только supabase-диалоги
+  const convBox = document.getElementById('conv-msgs-' + id);
+  if (!convBox || document.getElementById('adm-controls')) return;
+  const wrap = document.createElement('div');
+  wrap.id = 'adm-controls';
+  wrap.style.cssText = 'margin-top:10px;padding:12px;border:1px solid var(--bd,#e2e8f0);border-radius:10px;background:var(--bg2,#f8fafc);';
+  const isHuman = b.sbStatus === 'human';
+  wrap.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <span style="font-size:11px;font-weight:700;letter-spacing:.05em;color:${isHuman ? '#dc2626' : '#059669'};">
+        ${isHuman ? '🔴 CONTROL MANUAL' : '🟢 DIANA (AI) ACTIVĂ'}
+      </span>
+      <button onclick="sbTakeOver('${b.sbId}', ${!isHuman})" style="margin-left:auto;padding:6px 14px;border-radius:7px;border:1px solid #cbd5e1;background:${isHuman ? '#fff' : '#0f172a'};color:${isHuman ? '#0f172a' : '#fff'};font-size:12px;font-weight:600;cursor:pointer;">
+        ${isHuman ? '↩ Returnează la AI' : '✋ Preia conversația'}
+      </button>
+    </div>
+    ${isHuman ? `
+    <div style="display:flex;gap:8px;">
+      <input id="adm-reply-inp" type="text" placeholder="Scrieți răspunsul..." style="flex:1;padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;outline:none;" onkeydown="if(event.key==='Enter')sbAdminSend('${b.sbId}')"/>
+      <button onclick="sbAdminSend('${b.sbId}')" style="padding:9px 18px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Trimite</button>
+    </div>` : ''}
+  `;
+  convBox.parentElement.appendChild(wrap);
+}
+</script>
 <script>
 // ═══ DATA ═══
 const ANALYTICS_DATA = {
@@ -633,7 +734,7 @@ function loadBookings() {
       }));
   } catch(e){}
   const storedIds = new Set(stored.map(b=>b.id));
-  allBookings = [...stored, ...dialogs, ...DEMO.filter(b=>!storedIds.has(b.id))];
+  allBookings = [...sbConvs, ...stored, ...dialogs, ...DEMO.filter(b=>!storedIds.has(b.id))];
   updateStats(); renderList();
 }
 
@@ -765,7 +866,7 @@ function showDetail(id){
     <div class="dcard"><div class="dcard-ttl">${tr.dPat}</div><div class="dfield"><div class="dfield-lbl">${tr.fldName}</div><div class="dfield-val">${b.name}</div></div><div class="dfield"><div class="dfield-lbl">${tr.fldPhone}</div><div class="dfield-val">${b.phone}</div></div><div class="dfield"><div class="dfield-lbl">${tr.fldLang}</div><div class="dfield-val">${b.lang==='en'?'English':'Română'}</div></div></div></div>
     <div class="conv-card"><div class="conv-hdr">${tr.convHdr} <span>${conv.length} ${tr.msgs}</span><button onclick="exportChat('${b.id}')" style="margin-left:auto;padding:3px 10px;font-size:11px;border:1px solid var(--bd);border-radius:6px;background:#fff;color:var(--tm);cursor:pointer;font-family:Inter,sans-serif;font-weight:500;">⬇ ${tr.exportBtn}</button></div><div class="conv-msgs" id="conv-msgs-${b.id}">${convHtml}</div></div>`;
   // Scroll to bottom
-  setTimeout(()=>{ const cm=document.getElementById('conv-msgs-'+id); if(cm) cm.scrollTop=cm.scrollHeight; },60);
+  setTimeout(()=>{ const cm=document.getElementById('conv-msgs-'+id); if(cm) cm.scrollTop=cm.scrollHeight; injectChatControls(id); },60);
 }
 
 window.changeStatus=function(id,status){
@@ -1148,8 +1249,8 @@ function renderReturnChart(){
 // ═══ INIT ═══
 applyTr();
 resetPatients();
-loadBookings();
-setInterval(loadBookings,30000);
+(async () => { await sbLoad(); loadBookings(); })();
+setInterval(async () => { await sbLoad(); loadBookings(); }, 30000);
 </script>
 </body>
 </html>
