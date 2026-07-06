@@ -455,6 +455,7 @@ async function sbAdminSend(convId) {
   try {
     await sb.from('messages').insert({ conversation_id: convId, role: 'admin', text });
     await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', convId);
+    await sbRefresh(); // immediate local update — don't wait for realtime echo
   } catch(e) { console.warn('adminSend', e); }
 }
 
@@ -1270,6 +1271,8 @@ applyTr();
 resetPatients();
 (async () => { await sbLoad(); loadBookings(); })();
 setInterval(async () => { await sbLoad(); loadBookings(); }, 30000);
+// Faster refresh while a conversation is open (realtime fallback)
+setInterval(async () => { if (currentId) await sbRefresh(); }, 4000);
 </script>
 </body>
 </html>
