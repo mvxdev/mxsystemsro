@@ -150,8 +150,14 @@ let sbChannel = null;
 
 async function sbCreateConv() {
   try {
-    await sb.from('conversations').upsert({ id: sessionId, clinic: 'smilecare', lang, channel: 'widget', status: 'ai' });
-    convStatus = 'ai';
+    // Only create if it doesn't exist — never overwrite an existing status (e.g. 'booked'/'human')
+    const { data: existing } = await sb.from('conversations').select('id,status').eq('id', sessionId).maybeSingle();
+    if (!existing) {
+      await sb.from('conversations').insert({ id: sessionId, clinic: 'smilecare', lang, channel: 'widget', status: 'ai' });
+      convStatus = 'ai';
+    } else {
+      convStatus = existing.status || 'ai';
+    }
     sbSubscribe();
   } catch(e) { console.warn('sb conv', e); }
 }
@@ -265,7 +271,13 @@ let lang = 'ro';
 let history = [];
 let pendingBooking = null;
 let convMessages = [];
-let sessionId = (function(){ try{ let s=sessionStorage.getItem('mx_sess'); if(!s){ s='sess_'+Date.now(); sessionStorage.setItem('mx_sess',s);} return s; }catch(e){ return 'sess_'+Date.now(); } })();
+let sessionId = (function(){
+  try {
+    let s = localStorage.getItem('mx_active_sess');
+    if (!s) { s = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2,7); localStorage.setItem('mx_active_sess', s); }
+    return s;
+  } catch(e) { return 'sess_' + Date.now(); }
+})();
 let bookingId = null; // track if booking already saved
 
 const msgsEl = document.getElementById('msgs');
@@ -480,7 +492,8 @@ async function send(text) {
   const newBookingPhrases = ['Book someone else','Altă programare','book someone','altă programare'];
   if (newBookingPhrases.some(p => text.toLowerCase().includes(p.toLowerCase()))) {
     bookingId = null;
-    sessionId = 'sess_' + Date.now();
+    sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+    try { localStorage.setItem('mx_active_sess', sessionId); } catch(e){}
     convMessages = [];
     sbCreateConv();
   }
@@ -510,14 +523,19 @@ async function send(text) {
     const booking = parseBooking(reply);
     if (booking) {
       pendingBooking = booking;
-      const clean = reply.replace(/(?:BOOKING_READY|PROGRAMARE_GATA):.*/, '').trim();
+      const clean = reply.replace(/(?:BOOKING_READY|PROGRAMARE_GATA):.*/s, '').trim();
       if (clean) addMsg(clean, 'bot');
       addMsg('', 'bot', { type: 'confirm', d: booking });
     } else {
       addMsg(reply, 'bot');
     }
     history.push({ role: 'assistant', content: reply });
-    sbSaveMsg('bot', booking ? (reply.replace(/(?:BOOKING_READY|PROGRAMARE_GATA):.*/, '').trim() || reply) : reply);
+    if (booking) {
+      const cleanForDb = reply.replace(/(?:BOOKING_READY|PROGRAMARE_GATA):.*/s, '').trim();
+      if (cleanForDb) sbSaveMsg('bot', cleanForDb); // save only the human-readable part, never the marker
+    } else {
+      sbSaveMsg('bot', reply);
+    }
 
     if (history.length <= 2) setQR(T[lang].qr);
 
@@ -538,6 +556,7 @@ window.confirmBooking = function(yes) {
       : `Excelent, **${pendingBooking.name}**! Programarea este confirmată.\n\nVă așteptăm la SmileCare. SMS pe **${pendingBooking.phone}**. 🦷`;
     addMsg(msg, 'bot');
     history.push({ role: 'assistant', content: msg });
+    sbSaveMsg('bot', msg);
     setQR(tr.qr2);
   } else {
     const msg = lang === 'en' ? 'Of course! What would you like to change?' : 'Desigur! Ce doriți să modificați?';
