@@ -460,11 +460,27 @@ function mergeAndRender() {
   if (currentId) showDetail(currentId);
 }
 
-// Realtime: любое изменение → перезагрузка
+// Realtime: сохраняем состояние поля ввода перед перерисовкой
+async function sbRefresh() {
+  // Preserve admin reply input focus & value across re-render
+  const inp = document.getElementById('adm-reply-inp');
+  const savedVal = inp ? inp.value : null;
+  const hadFocus = inp && document.activeElement === inp;
+  const savedSel = inp ? inp.selectionStart : null;
+  await sbLoad();
+  mergeAndRender();
+  if (savedVal !== null) {
+    const newInp = document.getElementById('adm-reply-inp');
+    if (newInp) {
+      newInp.value = savedVal;
+      if (hadFocus) { newInp.focus(); try { newInp.setSelectionRange(savedSel, savedSel); } catch(e){} }
+    }
+  }
+}
 sb.channel('admin-live')
-  .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, async () => { await sbLoad(); mergeAndRender(); })
-  .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, async () => { await sbLoad(); mergeAndRender(); })
-  .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, async () => { await sbLoad(); mergeAndRender(); })
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, sbRefresh)
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, sbRefresh)
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, sbRefresh)
   .subscribe();
 
 // ═══ CHAT TAKEOVER UI ═══
@@ -674,7 +690,7 @@ function switchTab(name, el) {
 
 // ═══ BOOKINGS ═══
 const DEMO = [
-  {id:'d1',name:'Maria Ionescu',phone:'+40 769 123 456',service:'Igienizare profesională',time:'Vineri 16:00',status:'new',channel:'widget',lang:'ru',createdAt:new Date(Date.now()-8*60000),
+  {id:'d1',name:'Maria Ionescu',phone:'+40 769 123 456',service:'Igienizare profesională',time:'Vineri 16:00',status:'new',channel:'widget',lang:'ro',createdAt:new Date(Date.now()-8*60000),
    conversation:[
     {role:'bot',text:'Bună ziua! Sunt Diana, asistentul SmileCare 🦷\nCu ce vă pot ajuta?',time:'14:52'},
     {role:'usr',text:'Vreau să mă programez la o igienizare',time:'14:53'},
@@ -692,7 +708,7 @@ const DEMO = [
     {role:'usr',text:'Da. Alexandru Popescu, 079234567',time:'14:22'},
     {role:'bot',text:'Alexandru, **joi la 11:00**. Ne vedem la SmileCare! 🦷',time:'14:23'}
   ]},
-  {id:'d3',name:'Elena Constantin',phone:'+40 760 345 678',service:'Tratament carie',time:'Miercuri 10:30',status:'new',channel:'widget',lang:'ru',createdAt:new Date(Date.now()-2*3600000),
+  {id:'d3',name:'Elena Constantin',phone:'+40 760 345 678',service:'Tratament carie',time:'Miercuri 10:30',status:'new',channel:'widget',lang:'ro',createdAt:new Date(Date.now()-2*3600000),
    conversation:[
     {role:'bot',text:'Bună ziua! Sunt Diana, asistentul SmileCare.',time:'12:55'},
     {role:'usr',text:'Mă doare un dinte de 3 zile',time:'12:56'},
@@ -728,7 +744,7 @@ function loadBookings() {
         time: '—',
         status: 'dialog',
         channel: d.channel || 'widget',
-        lang: d.lang || 'ru',
+        lang: d.lang || 'ro',
         createdAt: new Date(d.updatedAt || Date.now()),
         conversation: d.conversation
       }));
@@ -861,7 +877,7 @@ function showDetail(id){
     const nb=document.createElement('button'); nb.className='abtn sec'; nb.textContent=tr.btnRestore; nb.onclick=()=>changeStatus(b.id,'new');
     setTimeout(()=>{const el=det.querySelector('.d-actions');if(el){el.innerHTML='';[rb,nb].forEach(b=>el.appendChild(b));}},0);
   }
-  det.innerHTML=`<div class="d-header"><div class="d-av">${initials}</div><div style="flex:1"><div class="d-name">${b.name}</div><div class="d-meta"><span>📞 ${b.phone}</span><span>🕐 ${timeAgo(b.createdAt)}</span><span>${chIcon}</span><span>${b.lang==='en'?'🇬🇧 English':'🇷🇴 Română'}</span><span class="sbadge ${sClass}">${sLabel}</span></div></div><div class="d-actions">${actionBtns}</div></div>
+  det.innerHTML=`<div class="d-header"><div class="d-av">${initials}</div><div style="flex:1"><div class="d-name">${b.name}</div><div class="d-meta"><span>📞 ${b.phone}</span><span>🕐 ${timeAgo(b.createdAt)}</span><span>${chIcon}</span><span>${b.lang==='en'?'🇬🇧 English':b.lang==='ru'?'🇷🇺 Русский':'🇷🇴 Română'}</span><span class="sbadge ${sClass}">${sLabel}</span></div></div><div class="d-actions">${actionBtns}</div></div>
     <div class="d-grid"><div class="dcard"><div class="dcard-ttl">${tr.dBook}</div><div class="dfield"><div class="dfield-lbl">${tr.fldSvc}</div><div class="dfield-val g">${b.service}</div></div><div class="dfield"><div class="dfield-lbl">${tr.fldTime}</div><div class="dfield-val">${b.time}</div></div><div class="dfield"><div class="dfield-lbl">${tr.fldStatus}</div><div class="dfield-val"><span class="sbadge ${sClass}">${sLabel}</span></div></div><div class="dfield"><div class="dfield-lbl">${tr.fldCh}</div><div class="dfield-val">${chIcon}</div></div></div>
     <div class="dcard"><div class="dcard-ttl">${tr.dPat}</div><div class="dfield"><div class="dfield-lbl">${tr.fldName}</div><div class="dfield-val">${b.name}</div></div><div class="dfield"><div class="dfield-lbl">${tr.fldPhone}</div><div class="dfield-val">${b.phone}</div></div><div class="dfield"><div class="dfield-lbl">${tr.fldLang}</div><div class="dfield-val">${b.lang==='en'?'English':'Română'}</div></div></div></div>
     <div class="conv-card"><div class="conv-hdr">${tr.convHdr} <span>${conv.length} ${tr.msgs}</span><button onclick="exportChat('${b.id}')" style="margin-left:auto;padding:3px 10px;font-size:11px;border:1px solid var(--bd);border-radius:6px;background:#fff;color:var(--tm);cursor:pointer;font-family:Inter,sans-serif;font-weight:500;">⬇ ${tr.exportBtn}</button></div><div class="conv-msgs" id="conv-msgs-${b.id}">${convHtml}</div></div>`;
