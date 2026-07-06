@@ -519,6 +519,42 @@ async function sbRefresh() {
     }
   }
 }
+// ── ЛЁГКИЙ POLL открытого диалога: только новые сообщения, каждые 1.5с ──
+let openConvPollTimer = null;
+let openConvLastMsgCount = 0;
+function startOpenConvPoll() {
+  if (openConvPollTimer) clearInterval(openConvPollTimer);
+  openConvPollTimer = setInterval(async () => {
+    if (!currentId) return;
+    const b = allBookings.find(x => x.id === currentId);
+    if (!b || !b.sbId) return; // только supabase-диалоги
+    try {
+      const { data: msgs } = await sb.from('messages')
+        .select('id,role,text,created_at')
+        .eq('conversation_id', b.sbId)
+        .order('created_at', { ascending: true });
+      if (!msgs) return;
+      // обновляем conversation в памяти
+      b.conversation = msgs.map(m => ({
+        role: m.role === 'admin' ? 'bot' : m.role,
+        text: m.role === 'admin' ? '👨‍⚕️ Administrator: ' + m.text : m.text,
+        time: new Date(m.created_at).toLocaleTimeString('ro', { hour: '2-digit', minute: '2-digit' })
+      }));
+      // подтягиваем режим чата
+      const { data: conv } = await sb.from('conversations').select('chat_mode,status,patient_name,patient_phone,service,appt_time').eq('id', b.sbId).maybeSingle();
+      if (conv) {
+        b.sbStatus = conv.chat_mode || 'ai';
+        if (conv.patient_name) b.name = conv.patient_name;
+        if (conv.patient_phone) b.phone = conv.patient_phone;
+        if (conv.service) b.service = conv.service;
+        if (conv.appt_time) b.time = conv.appt_time;
+      }
+      // дописываем новые сообщения без полной перерисовки
+      softUpdateDetail(currentId);
+    } catch(e) { /* silent */ }
+  }, 1500);
+}
+
 // ═══ ДЕЛЕГИРОВАННЫЕ ОБРАБОТЧИКИ (не зависят от перерисовки кнопок) ═══
 document.addEventListener('click', function(e) {
   const takeoverBtn = e.target.closest('#takeover-btn');
@@ -1341,7 +1377,7 @@ function renderReturnChart(){
 // ═══ INIT ═══
 applyTr();
 resetPatients();
-(async () => { await sbLoad(); loadBookings(); })();
+(async () => { await sbLoad(); loadBookings(); startOpenConvPoll(); })();
 setInterval(async () => { await sbLoad(); loadBookings(); }, 30000);
 // Faster refresh while a conversation is open (realtime fallback)
 setInterval(async () => { if (currentId) await sbRefresh(); }, 4000);
