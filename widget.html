@@ -260,7 +260,7 @@ let lang = 'ro';
 let history = [];
 let pendingBooking = null;
 let convMessages = [];
-let sessionId = 'sess_' + Date.now();
+let sessionId = (function(){ try{ let s=sessionStorage.getItem('mx_sess'); if(!s){ s='sess_'+Date.now(); sessionStorage.setItem('mx_sess',s);} return s; }catch(e){ return 'sess_'+Date.now(); } })();
 let bookingId = null; // track if booking already saved
 
 const msgsEl = document.getElementById('msgs');
@@ -513,7 +513,6 @@ async function send(text) {
     }
     history.push({ role: 'assistant', content: reply });
     sbSaveMsg('bot', booking ? (reply.replace(/(?:BOOKING_READY|PROGRAMARE_GATA):.*/, '').trim() || reply) : reply);
-    updateStoredConversation();
 
     if (history.length <= 2) setQR(T[lang].qr);
 
@@ -526,8 +525,8 @@ async function send(text) {
 window.confirmBooking = function(yes) {
   const tr = T[lang];
   if (yes && pendingBooking) {
-    saveBooking(pendingBooking);
-    sbSaveBooking(pendingBooking);
+    sbSaveBooking(pendingBooking); // Supabase primary
+    // saveBooking(pendingBooking); // localStorage disabled — Supabase is source of truth
     // Reset session so next booking creates a new entry
     bookingId = null;
     sessionId = 'sess_' + Date.now();
