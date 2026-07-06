@@ -423,7 +423,7 @@ async function sbLoad() {
       return {
         id: 'sb_' + c.id,
         sbId: c.id,
-        sbStatus: c.status,
+        sbStatus: c.chat_mode || 'ai',  // chat mode: ai | human (для перехвата)
         name: c.patient_name || (bk && bk.name) || 'Vizitator',
         phone: c.patient_phone || (bk && bk.phone) || '—',
         // Service: booked conversation shows the service, otherwise it's still a dialog
@@ -448,7 +448,7 @@ async function sbTakeOver(convId, take) {
   const b = allBookings.find(x => x.sbId === convId);
   if (b) { b.sbStatus = take ? 'human' : 'ai'; syncChatControls(b.id); }
   try {
-    await sb.from('conversations').update({ status: take ? 'human' : 'ai', updated_at: new Date().toISOString() }).eq('id', convId);
+    await sb.from('conversations').update({ chat_mode: take ? 'human' : 'ai', updated_at: new Date().toISOString() }).eq('id', convId);
     await sbLoad();
     updateStats(); renderList();
     if (currentId) syncChatControls(currentId);
