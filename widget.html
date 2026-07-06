@@ -148,22 +148,26 @@ const sb = supabase.createClient(SB_URL, SB_KEY);
 let convStatus = 'ai';
 let sbChannel = null;
 
-async function sbCreateConv() {
-  try {
-    // Only create if it doesn't exist — never overwrite an existing status (e.g. 'booked'/'human')
-    const { data: existing } = await sb.from('conversations').select('id,status').eq('id', sessionId).maybeSingle();
-    if (!existing) {
-      await sb.from('conversations').insert({ id: sessionId, clinic: 'smilecare', lang, channel: 'widget', status: 'ai' });
-      convStatus = 'ai';
-    } else {
-      convStatus = existing.status || 'ai';
-    }
-    sbSubscribe();
-  } catch(e) { console.warn('sb conv', e); }
+function sbCreateConv() {
+  convReady = (async () => {
+    try {
+      const { data: existing } = await sb.from('conversations').select('id,chat_mode,status').eq('id', sessionId).maybeSingle();
+      if (!existing) {
+        await sb.from('conversations').insert({ id: sessionId, clinic: 'smilecare', lang, channel: 'widget', chat_mode: 'ai', status: 'dialog' });
+        convStatus = 'ai';
+      } else {
+        convStatus = existing.chat_mode || 'ai';
+      }
+      sbSubscribe();
+    } catch(e) { console.warn('sb conv', e); }
+  })();
+  return convReady;
 }
 
+let convReady = null; // promise that resolves once conversation exists
 async function sbSaveMsg(role, text) {
   try {
+    if (convReady) await convReady; // ensure conversation row exists first
     await sb.from('messages').insert({ conversation_id: sessionId, role, text });
     await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', sessionId);
   } catch(e) { console.warn('sb msg', e); }
@@ -198,8 +202,8 @@ function sbSubscribe() {
     })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations',
         filter: 'id=eq.' + sessionId }, payload => {
-      const st = payload.new.status;
-      if (st !== convStatus) {
+      const st = payload.new.chat_mode;
+      if (st && st !== convStatus) {
         convStatus = st;
         if (st === 'human') {
           addMsg(lang === 'en'
