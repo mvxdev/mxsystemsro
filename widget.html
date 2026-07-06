@@ -169,7 +169,12 @@ async function sbSaveBooking(b) {
       id: 'bk_' + Date.now(), conversation_id: sessionId, clinic: 'smilecare',
       name: b.name, phone: b.phone, service: b.service, time: b.time, lang, status: 'new'
     });
-    await sb.from('conversations').update({ patient_name: b.name, patient_phone: b.phone }).eq('id', sessionId);
+    // Attach booking data to the SAME conversation (service, name, phone, time, status)
+    await sb.from('conversations').update({
+      patient_name: b.name, patient_phone: b.phone,
+      service: b.service, appt_time: b.time, status: 'booked',
+      updated_at: new Date().toISOString()
+    }).eq('id', sessionId);
   } catch(e) { console.warn('sb booking', e); }
 }
 
@@ -527,9 +532,7 @@ window.confirmBooking = function(yes) {
   if (yes && pendingBooking) {
     sbSaveBooking(pendingBooking); // Supabase primary
     // saveBooking(pendingBooking); // localStorage disabled — Supabase is source of truth
-    // Reset session so next booking creates a new entry
-    bookingId = null;
-    sessionId = 'sess_' + Date.now();
+    // Keep the same conversation — booking is now attached to it
     const msg = lang === 'en'
       ? `Great, **${pendingBooking.name}**! Your appointment is confirmed.\n\nSee you at SmileCare. SMS will arrive at **${pendingBooking.phone}**. 🦷`
       : `Excelent, **${pendingBooking.name}**! Programarea este confirmată.\n\nVă așteptăm la SmileCare. SMS pe **${pendingBooking.phone}**. 🦷`;
