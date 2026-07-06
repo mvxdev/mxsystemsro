@@ -5,7 +5,10 @@
   })();
 
   var clinic = script.getAttribute('data-clinic') || 'smilecare';
-  var widgetUrl = 'https://mxsystems.ro/widget.html';
+  // Auto-detect: widget loads from the same location as this script
+  var scriptSrc = script.src || '';
+  var basePath = scriptSrc.substring(0, scriptSrc.lastIndexOf('/') + 1);
+  var widgetUrl = (basePath || 'https://mxsystems.ro/') + 'widget.html';
 
   // Inject styles
   var style = document.createElement('style');
