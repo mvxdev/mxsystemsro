@@ -793,7 +793,7 @@ const T = {
     'cs6desc':'AI assistant for fitness clubs. Class scheduling, reminders, membership renewals, win-back campaigns.',
     'cs6r1':'repeat visits ↗','cs6r2':'conversion vs form ↗','cs6r3':'bot uptime',
     'roi-label':'Calculate together','roi-title':'How much does AI bring<br>your business?',
-    'rl1':'Average check (MDL)','rl2':'Dialogues per month','rl3':'Platform cost (MDL/month)',
+    'rl1':'Average ticket (€)','rl2':'Dialogues per month','rl3':'Platform cost (€/month)',
     'roi-rlbl':'Additional AI revenue','roi-rsub':'per month',
     'roi-bd1':'New clients per month','roi-bd2':'Revenue from new clients','roi-bd3':'Platform cost','roi-bd4':'Total AI revenue',
     'p-label':'Pricing','p-title':'Transparent<br>pricing.',
@@ -814,7 +814,7 @@ const T = {
     'mt0':'Select time','mt1':'Today, as soon as possible','mt2':'Tomorrow morning (9:00-12:00)','mt3':'Tomorrow afternoon (12:00-17:00)','mt4':'This week anytime',
     'modal-submit':'Send request',
     'msuc-title':'Request received!','msuc-sub':'We will contact you within 30 minutes.<br>WhatsApp / Telegram: <strong>+373 69 589 555</strong>',
-    'cur':'MDL','sending':'Sending...',
+    'cur':'€','sending':'Sending...',
   }
 };
 
@@ -931,8 +931,8 @@ async function submitModal(){
   const time = document.getElementById('m-time').value;
   const btn = document.getElementById('modal-submit-btn');
   btn.textContent = T[lang]['sending']; btn.disabled=true;
-  const typeLabel = modalType==='demo'?'📱 Demo online':'📞 Apel / Звонок';
-  const text = `🚀 Новая заявка — MX Systems\n\n${typeLabel}\n👤 ${name}\n📱 ${phone}${clinic?'\n🏢 '+clinic:''}${time?'\n🕐 '+time:''}`;
+  const typeLabel = modalType==='demo'?'📱 Demo online':'📞 Apel telefonic';
+  const text = `🚀 Cerere nouă — MX Systems\n\n${typeLabel}\n👤 ${name}\n📱 ${phone}${clinic?'\n🏢 '+clinic:''}${time?'\n🕐 '+time:''}`;
   try{
     await fetch('https://smilecare-proxy.badmvx7.workers.dev/telegram',{
       method:'POST',headers:{'Content-Type':'application/json'},
@@ -1014,8 +1014,8 @@ lenis.on('scroll', ({scroll}) => {
   if (nav) nav.style.boxShadow = scroll > 40 ? '0 4px 24px rgba(10,15,30,.08)' : '';
 });
 
-// ── АНИМАЦИИ ПРИ СКРОЛЛЕ ──
-// Все .fade элементы — через ScrollTrigger вместо IntersectionObserver
+// ── SCROLL ANIMATIONS ──
+// All .fade elements via ScrollTrigger
 document.querySelectorAll('.fade:not(.slide-1 .fade)').forEach(el => {
   gsap.fromTo(el,
     { opacity: 0, y: 22 },
@@ -1024,7 +1024,7 @@ document.querySelectorAll('.fade:not(.slide-1 .fade)').forEach(el => {
   );
 });
 
-// Slide-1 hero — сразу показать
+// Slide-1 hero — show immediately
 document.querySelectorAll('.slide-1 .fade').forEach((el, i) => {
   gsap.to(el, { opacity: 1, y: 0, duration: 0.7, ease: 'power3.out', delay: i * 0.1 });
 });
