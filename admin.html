@@ -419,15 +419,18 @@ async function sbLoad() {
     (books || []).forEach(b => { bookByConv[b.conversation_id] = b; });
     sbConvs = (convs || []).filter(c => (msgsByConv[c.id] || []).length > 0).map(c => {
       const bk = bookByConv[c.id];
+      const hasBooking = c.status === 'booked' || !!bk;
       return {
         id: 'sb_' + c.id,
         sbId: c.id,
         sbStatus: c.status,
         name: c.patient_name || (bk && bk.name) || 'Vizitator',
         phone: c.patient_phone || (bk && bk.phone) || '—',
-        service: (bk && bk.service) || 'Dialog',
-        time: (bk && bk.time) || '—',
-        status: bk ? (bk.status || 'new') : (c.status === 'human' ? 'dialog' : 'dialog'),
+        // Service: booked conversation shows the service, otherwise it's still a dialog
+        service: c.service || (bk && bk.service) || 'Dialog',
+        time: c.appt_time || (bk && bk.time) || '—',
+        // Status: booked → 'new' (needs confirmation), human takeover → keeps 'dialog', else dialog
+        status: hasBooking ? (bk && bk.status ? bk.status : 'new') : 'dialog',
         channel: c.channel || 'widget',
         lang: c.lang || 'ro',
         createdAt: new Date(c.updated_at || c.created_at),
