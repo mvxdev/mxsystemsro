@@ -440,11 +440,24 @@ async function sbLoad() {
   } catch(e) { console.warn('sbLoad', e); }
 }
 
+let takeoverBusy = false;
 async function sbTakeOver(convId, take) {
+  if (takeoverBusy) return;
+  takeoverBusy = true;
+  // Оптимистичное обновление: меняем статус локально сразу, не дожидаясь сервера
+  const b = allBookings.find(x => x.sbId === convId);
+  if (b) { b.sbStatus = take ? 'human' : 'ai'; syncChatControls(b.id); }
   try {
-    await sb.from('conversations').update({ status: take ? 'human' : 'ai' }).eq('id', convId);
-    await sbLoad(); mergeAndRender();
-  } catch(e) { console.warn('takeover', e); }
+    await sb.from('conversations').update({ status: take ? 'human' : 'ai', updated_at: new Date().toISOString() }).eq('id', convId);
+    await sbLoad();
+    updateStats(); renderList();
+    if (currentId) syncChatControls(currentId);
+  } catch(e) {
+    console.warn('takeover', e);
+    if (b) { b.sbStatus = take ? 'ai' : 'human'; syncChatControls(b.id); } // откат при ошибке
+  } finally {
+    takeoverBusy = false;
+  }
 }
 
 async function sbAdminSend(convId) {
@@ -461,7 +474,32 @@ async function sbAdminSend(convId) {
 
 function mergeAndRender() {
   updateStats(); renderList();
-  if (currentId) showDetail(currentId);
+  if (currentId) softUpdateDetail(currentId);
+}
+
+// Обновляет открытый диалог БЕЗ полной перерисовки: дописывает новые сообщения и синхронизирует контролы
+function softUpdateDetail(id) {
+  const b = allBookings.find(x => x.id === id);
+  if (!b) return;
+  const convBox = document.getElementById('conv-msgs-' + id);
+  if (!convBox) { showDetail(id); return; } // диалог не отрисован — полный рендер
+  // 1. Дописать недостающие сообщения
+  const rendered = convBox.querySelectorAll('.cmsg').length;
+  const conv = b.conversation || [];
+  if (conv.length > rendered) {
+    for (let k = rendered; k < conv.length; k++) {
+      const m = conv[k];
+      const isBot = m.role === 'bot';
+      const div = document.createElement('div');
+      const bubble = isBot ? renderMd(m.text) : m.text;
+      div.className = 'cmsg ' + (!isBot ? 'umsg' : '');
+      div.innerHTML = `<div class="cmsg-av ${isBot?'bav':'uav'}">${isBot?'D':'П'}</div><div class="cmsg-body"><div class="cmsg-bbl ${isBot?'bbbl':'ubbl'}">${bubble}</div><div class="cmsg-time">${m.time||''}</div></div>`;
+      convBox.appendChild(div);
+    }
+    convBox.scrollTop = convBox.scrollHeight;
+  }
+  // 2. Синхронизировать панель управления (статус мог смениться)
+  syncChatControls(id);
 }
 
 // Realtime: сохраняем состояние поля ввода перед перерисовкой
@@ -488,13 +526,22 @@ sb.channel('admin-live')
   .subscribe();
 
 // ═══ CHAT TAKEOVER UI ═══
-function injectChatControls(id) {
+function injectChatControls(id) { syncChatControls(id); }
+
+function syncChatControls(id) {
   const b = allBookings.find(x => x.id === id);
   if (!b || !b.sbId) return; // только supabase-диалоги
   const convBox = document.getElementById('conv-msgs-' + id);
-  if (!convBox || document.getElementById('adm-controls')) return;
-  const wrap = document.createElement('div');
+  if (!convBox) return;
+  const isHuman = b.sbStatus === 'human';
+  let wrap = document.getElementById('adm-controls');
+  // Если контролы уже есть и статус не изменился — не трогаем (сохраняем фокус ввода)
+  if (wrap && wrap.dataset.human === String(isHuman) && wrap.dataset.conv === b.sbId) return;
+  if (wrap) wrap.remove();
+  wrap = document.createElement('div');
   wrap.id = 'adm-controls';
+  wrap.dataset.human = String(isHuman);
+  wrap.dataset.conv = b.sbId;
   wrap.style.cssText = 'margin-top:10px;padding:12px;border:1px solid var(--bd,#e2e8f0);border-radius:10px;background:var(--bg2,#f8fafc);';
   const isHuman = b.sbStatus === 'human';
   wrap.innerHTML = `
