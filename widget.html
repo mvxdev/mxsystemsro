@@ -138,8 +138,72 @@ body{font-family:'Inter',sans-serif;background:#fff;display:flex;flex-direction:
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const WORKER = 'https://smilecare-proxy.badmvx7.workers.dev';
+// ── SUPABASE ──
+const SB_URL = 'https://jkehyvlmdqbjajfoedie.supabase.co';
+const SB_KEY = 'sb_publishable_T9GXe53o17dh3LxZj5RGcQ_1fOZ_Zzn';
+const sb = supabase.createClient(SB_URL, SB_KEY);
+let convStatus = 'ai';
+let sbChannel = null;
+
+async function sbCreateConv() {
+  try {
+    await sb.from('conversations').upsert({ id: sessionId, clinic: 'smilecare', lang, channel: 'widget', status: 'ai' });
+    convStatus = 'ai';
+    sbSubscribe();
+  } catch(e) { console.warn('sb conv', e); }
+}
+
+async function sbSaveMsg(role, text) {
+  try {
+    await sb.from('messages').insert({ conversation_id: sessionId, role, text });
+    await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', sessionId);
+  } catch(e) { console.warn('sb msg', e); }
+}
+
+async function sbSaveBooking(b) {
+  try {
+    await sb.from('bookings').insert({
+      id: 'bk_' + Date.now(), conversation_id: sessionId, clinic: 'smilecare',
+      name: b.name, phone: b.phone, service: b.service, time: b.time, lang, status: 'new'
+    });
+    await sb.from('conversations').update({ patient_name: b.name, patient_phone: b.phone }).eq('id', sessionId);
+  } catch(e) { console.warn('sb booking', e); }
+}
+
+function sbSubscribe() {
+  if (sbChannel) { try { sb.removeChannel(sbChannel); } catch(e){} }
+  sbChannel = sb.channel('conv-' + sessionId)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages',
+        filter: 'conversation_id=eq.' + sessionId }, payload => {
+      const m = payload.new;
+      if (m.role === 'admin') {
+        removeTyping();
+        addMsg('👨‍⚕️ **Administrator:** ' + m.text, 'bot');
+        history.push({ role: 'assistant', content: '[Administrator]: ' + m.text });
+      }
+    })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations',
+        filter: 'id=eq.' + sessionId }, payload => {
+      const st = payload.new.status;
+      if (st !== convStatus) {
+        convStatus = st;
+        if (st === 'human') {
+          addMsg(lang === 'en'
+            ? '_An administrator has joined the conversation._'
+            : '_Un administrator s-a alăturat conversației._', 'bot');
+        } else if (st === 'ai') {
+          addMsg(lang === 'en'
+            ? '_Diana (AI) is back with you._'
+            : '_Diana (AI) a revenit la conversație._', 'bot');
+        }
+      }
+    })
+    .subscribe();
+}
+
 const MODEL  = 'claude-haiku-4-5-20251001';
 
 
@@ -214,6 +278,7 @@ function timeGreeting(l) {
 // ── Start chat after lang choice ──
 window.startChat = function(l) {
   lang = l;
+  sbCreateConv();
   const tr = T[l];
   document.getElementById('lang-screen').style.display = 'none';
   const ca = document.getElementById('chat-area');
@@ -412,11 +477,14 @@ async function send(text) {
     bookingId = null;
     sessionId = 'sess_' + Date.now();
     convMessages = [];
+    sbCreateConv();
   }
   qrEl.innerHTML = '';
   addMsg(text, 'usr');
   history.push({ role: 'user', content: text });
   inpEl.value = '';
+  sbSaveMsg('usr', text);
+  if (convStatus === 'human') return; // admin is handling — AI stays silent
   showTyping();
 
   try {
@@ -444,6 +512,7 @@ async function send(text) {
       addMsg(reply, 'bot');
     }
     history.push({ role: 'assistant', content: reply });
+    sbSaveMsg('bot', booking ? (reply.replace(/(?:BOOKING_READY|PROGRAMARE_GATA):.*/, '').trim() || reply) : reply);
     updateStoredConversation();
 
     if (history.length <= 2) setQR(T[lang].qr);
@@ -458,6 +527,7 @@ window.confirmBooking = function(yes) {
   const tr = T[lang];
   if (yes && pendingBooking) {
     saveBooking(pendingBooking);
+    sbSaveBooking(pendingBooking);
     // Reset session so next booking creates a new entry
     bookingId = null;
     sessionId = 'sess_' + Date.now();
