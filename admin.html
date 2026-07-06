@@ -357,7 +357,7 @@ tr:hover td{background:var(--sf);}
       <div class="scard"><div class="scard-lbl" id="an1l">Dialoguri</div><div class="scard-val g">284</div><div class="scard-sub" id="an1s">↑ +23% față de luna trecută</div></div>
       <div class="scard"><div class="scard-lbl" id="an2l">Rezolvate de AI</div><div class="scard-val g">91%</div><div class="scard-sub" id="an2s">fără operator</div></div>
       <div class="scard"><div class="scard-lbl" id="an3l">Programări create</div><div class="scard-val g">67</div><div class="scard-sub" id="an3s">conversie 23.6%</div></div>
-      <div class="scard"><div class="scard-lbl" id="an4l">Timp de răspuns</div><div class="scard-val g">2.3с</div><div class="scard-sub" id="an4s">24/7 non-stop</div></div>
+      <div class="scard"><div class="scard-lbl" id="an4l">Timp de răspuns</div><div class="scard-val g">2.3s</div><div class="scard-sub" id="an4s">24/7 non-stop</div></div>
     </div>
     <div class="analytics-grid">
       <div class="chart-card">
@@ -493,7 +493,7 @@ function softUpdateDetail(id) {
       const div = document.createElement('div');
       const bubble = isBot ? renderMd(m.text) : m.text;
       div.className = 'cmsg ' + (!isBot ? 'umsg' : '');
-      div.innerHTML = `<div class="cmsg-av ${isBot?'bav':'uav'}">${isBot?'D':'П'}</div><div class="cmsg-body"><div class="cmsg-bbl ${isBot?'bbbl':'ubbl'}">${bubble}</div><div class="cmsg-time">${m.time||''}</div></div>`;
+      div.innerHTML = `<div class="cmsg-av ${isBot?'bav':'uav'}">${isBot?'D':'P'}</div><div class="cmsg-body"><div class="cmsg-bbl ${isBot?'bbbl':'ubbl'}">${bubble}</div><div class="cmsg-time">${m.time||''}</div></div>`;
       convBox.appendChild(div);
     }
     convBox.scrollTop = convBox.scrollHeight;
@@ -519,7 +519,7 @@ async function sbRefresh() {
     }
   }
 }
-// ── ЛЁГКИЙ POLL открытого диалога: только новые сообщения, каждые 1.5с ──
+// ── ЛЁГКИЙ POLL открытого диалога: только новые сообщения, каждые 1.5s ──
 let openConvPollTimer = null;
 let openConvLastMsgCount = 0;
 function startOpenConvPoll() {
@@ -597,7 +597,7 @@ function syncChatControls(id) {
   if (!convBox) return;
   const isHuman = b.sbStatus === 'human';
   let wrap = document.getElementById('adm-controls');
-  // Не пересоздаём если статус и диалог те же — сохраняем поле ввода и фокус
+  // Skip re-render if status and conversation are unchanged — preserves input focus
   if (wrap && wrap.dataset.human === String(isHuman) && wrap.dataset.conv === b.sbId) return;
   if (wrap) wrap.remove();
   wrap = document.createElement('div');
@@ -968,7 +968,7 @@ function showDetail(id){
   const conv=b.conversation||[];
   const convHtml=conv.length>0?conv.map(m=>{
     const isBot=m.role==='bot';
-    return`<div class="cmsg ${!isBot?'umsg':''}"><div class="cmsg-av ${isBot?'bav':'uav'}">${isBot?'D':'П'}</div><div class="cmsg-body"><div class="cmsg-bbl ${isBot?'bbbl':'ubbl'}">${isBot?renderMd(m.text):m.text}</div><div class="cmsg-time">${m.time||''}</div></div></div>`;
+    return`<div class="cmsg ${!isBot?'umsg':''}"><div class="cmsg-av ${isBot?'bav':'uav'}">${isBot?'D':'P'}</div><div class="cmsg-body"><div class="cmsg-bbl ${isBot?'bbbl':'ubbl'}">${isBot?renderMd(m.text):m.text}</div><div class="cmsg-time">${m.time||''}</div></div></div>`;
   }).join(''):`<div style="padding:16px;text-align:center;color:var(--th);font-size:12px;">Niciun mesaj</div>`;
   let actionBtns='';
   if(b.status==='dialog'){ /* no actions for pure dialogs */ }
@@ -989,7 +989,7 @@ function showDetail(id){
     const nb=document.createElement('button'); nb.className='abtn sec'; nb.textContent=tr.btnRestore; nb.onclick=()=>changeStatus(b.id,'new');
     setTimeout(()=>{const el=det.querySelector('.d-actions');if(el){el.innerHTML='';[rb,nb].forEach(b=>el.appendChild(b));}},0);
   }
-  det.innerHTML=`<div class="d-header"><div class="d-av">${initials}</div><div style="flex:1"><div class="d-name">${b.name}</div><div class="d-meta"><span>📞 ${b.phone}</span><span>🕐 ${timeAgo(b.createdAt)}</span><span>${chIcon}</span><span>${b.lang==='en'?'🇬🇧 English':b.lang==='ru'?'🇷🇺 Русский':'🇷🇴 Română'}</span><span class="sbadge ${sClass}">${sLabel}</span></div></div><div class="d-actions">${actionBtns}</div></div>
+  det.innerHTML=`<div class="d-header"><div class="d-av">${initials}</div><div style="flex:1"><div class="d-name">${b.name}</div><div class="d-meta"><span>📞 ${b.phone}</span><span>🕐 ${timeAgo(b.createdAt)}</span><span>${chIcon}</span><span>${b.lang==='en'?'🇬🇧 English':'🇷🇴 Română'}</span><span class="sbadge ${sClass}">${sLabel}</span></div></div><div class="d-actions">${actionBtns}</div></div>
     <div class="d-grid"><div class="dcard"><div class="dcard-ttl">${tr.dBook}</div><div class="dfield"><div class="dfield-lbl">${tr.fldSvc}</div><div class="dfield-val g">${b.service}</div></div><div class="dfield"><div class="dfield-lbl">${tr.fldTime}</div><div class="dfield-val">${b.time}</div></div><div class="dfield"><div class="dfield-lbl">${tr.fldStatus}</div><div class="dfield-val"><span class="sbadge ${sClass}">${sLabel}</span></div></div><div class="dfield"><div class="dfield-lbl">${tr.fldCh}</div><div class="dfield-val">${chIcon}</div></div></div>
     <div class="dcard"><div class="dcard-ttl">${tr.dPat}</div><div class="dfield"><div class="dfield-lbl">${tr.fldName}</div><div class="dfield-val">${b.name}</div></div><div class="dfield"><div class="dfield-lbl">${tr.fldPhone}</div><div class="dfield-val">${b.phone}</div></div><div class="dfield"><div class="dfield-lbl">${tr.fldLang}</div><div class="dfield-val">${b.lang==='en'?'English':'Română'}</div></div></div></div>
     <div class="conv-card"><div class="conv-hdr">${tr.convHdr} <span>${conv.length} ${tr.msgs}</span><button onclick="exportChat('${b.id}')" style="margin-left:auto;padding:3px 10px;font-size:11px;border:1px solid var(--bd);border-radius:6px;background:#fff;color:var(--tm);cursor:pointer;font-family:Inter,sans-serif;font-weight:500;">⬇ ${tr.exportBtn}</button></div><div class="conv-msgs" id="conv-msgs-${b.id}">${convHtml}</div></div>`;
