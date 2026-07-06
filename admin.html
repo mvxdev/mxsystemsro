@@ -519,6 +519,32 @@ async function sbRefresh() {
     }
   }
 }
+// ═══ ДЕЛЕГИРОВАННЫЕ ОБРАБОТЧИКИ (не зависят от перерисовки кнопок) ═══
+document.addEventListener('click', function(e) {
+  const takeoverBtn = e.target.closest('#takeover-btn');
+  if (takeoverBtn) {
+    e.preventDefault();
+    const conv = takeoverBtn.dataset.conv;
+    const take = takeoverBtn.dataset.take === 'true';
+    sbTakeOver(conv, take);
+    return;
+  }
+  const sendBtn = e.target.closest('#adm-send-btn');
+  if (sendBtn) {
+    e.preventDefault();
+    sbAdminSend(sendBtn.dataset.conv);
+    return;
+  }
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && e.target && e.target.id === 'adm-reply-inp') {
+    e.preventDefault();
+    const wrap = document.getElementById('adm-controls');
+    const conv = wrap ? wrap.dataset.conv : null;
+    if (conv) sbAdminSend(conv);
+  }
+});
+
 sb.channel('admin-live')
   .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, sbRefresh)
   .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, sbRefresh)
@@ -530,33 +556,32 @@ function injectChatControls(id) { syncChatControls(id); }
 
 function syncChatControls(id) {
   const b = allBookings.find(x => x.id === id);
-  if (!b || !b.sbId) return; // только supabase-диалоги
+  if (!b || !b.sbId) return;
   const convBox = document.getElementById('conv-msgs-' + id);
   if (!convBox) return;
   const isHuman = b.sbStatus === 'human';
   let wrap = document.getElementById('adm-controls');
-  // Если контролы уже есть и статус не изменился — не трогаем (сохраняем фокус ввода)
+  // Не пересоздаём если статус и диалог те же — сохраняем поле ввода и фокус
   if (wrap && wrap.dataset.human === String(isHuman) && wrap.dataset.conv === b.sbId) return;
   if (wrap) wrap.remove();
   wrap = document.createElement('div');
   wrap.id = 'adm-controls';
   wrap.dataset.human = String(isHuman);
   wrap.dataset.conv = b.sbId;
-  wrap.style.cssText = 'margin-top:10px;padding:12px;border:1px solid var(--bd,#e2e8f0);border-radius:10px;background:var(--bg2,#f8fafc);';
-  const isHuman = b.sbStatus === 'human';
+  wrap.style.cssText = 'margin-top:10px;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;';
   wrap.innerHTML = `
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:${isHuman?'8px':'0'};">
       <span style="font-size:11px;font-weight:700;letter-spacing:.05em;color:${isHuman ? '#dc2626' : '#059669'};">
-        ${isHuman ? '🔴 CONTROL MANUAL' : '🟢 DIANA (AI) ACTIVĂ'}
+        ${isHuman ? '\u{1F534} CONTROL MANUAL' : '\u{1F7E2} DIANA (AI) ACTIV\u0102'}
       </span>
-      <button onclick="sbTakeOver('${b.sbId}', ${!isHuman})" style="margin-left:auto;padding:6px 14px;border-radius:7px;border:1px solid #cbd5e1;background:${isHuman ? '#fff' : '#0f172a'};color:${isHuman ? '#0f172a' : '#fff'};font-size:12px;font-weight:600;cursor:pointer;">
-        ${isHuman ? '↩ Returnează la AI' : '✋ Preia conversația'}
+      <button type="button" id="takeover-btn" data-conv="${b.sbId}" data-take="${!isHuman}" style="margin-left:auto;padding:7px 16px;border-radius:7px;border:1px solid #cbd5e1;background:${isHuman ? '#fff' : '#0f172a'};color:${isHuman ? '#0f172a' : '#fff'};font-size:12px;font-weight:600;cursor:pointer;">
+        ${isHuman ? '\u21A9 Returneaz\u0103 la AI' : '\u270B Preia conversa\u021Bia'}
       </button>
     </div>
     ${isHuman ? `
     <div style="display:flex;gap:8px;">
-      <input id="adm-reply-inp" type="text" placeholder="Scrieți răspunsul..." style="flex:1;padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;outline:none;" onkeydown="if(event.key==='Enter')sbAdminSend('${b.sbId}')"/>
-      <button onclick="sbAdminSend('${b.sbId}')" style="padding:9px 18px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Trimite</button>
+      <input id="adm-reply-inp" type="text" placeholder="Scrie\u021Bi r\u0103spunsul..." autocomplete="off" style="flex:1;padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;outline:none;"/>
+      <button type="button" id="adm-send-btn" data-conv="${b.sbId}" style="padding:9px 18px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Trimite</button>
     </div>` : ''}
   `;
   convBox.parentElement.appendChild(wrap);
