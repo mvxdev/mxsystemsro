@@ -159,6 +159,7 @@ function sbCreateConv() {
         convStatus = existing.chat_mode || 'ai';
       }
       sbSubscribe();
+      startWidgetPolling();
     } catch(e) { console.warn('sb conv', e); }
   })();
   return convReady;
@@ -188,6 +189,48 @@ async function sbSaveBooking(b) {
   } catch(e) { console.warn('sb booking', e); }
 }
 
+
+// ── POLLING FALLBACK: подтягиваем админские сообщения и смену режима (на случай если realtime молчит) ──
+let lastSeenMsgId = 0;
+let widgetPollTimer = null;
+function startWidgetPolling() {
+  if (widgetPollTimer) clearInterval(widgetPollTimer);
+  widgetPollTimer = setInterval(async () => {
+    try {
+      if (convReady) await convReady;
+      // 1. Новые админские сообщения
+      const { data: msgs } = await sb.from('messages')
+        .select('id,role,text')
+        .eq('conversation_id', sessionId)
+        .eq('role', 'admin')
+        .order('id', { ascending: true });
+      (msgs || []).forEach(m => {
+        if (m.id > lastSeenMsgId) {
+          lastSeenMsgId = m.id;
+          // не дублируем если realtime уже показал — помечаем по id
+          if (!document.querySelector('[data-mid="' + m.id + '"]')) {
+            removeTyping();
+            const el = addMsg('👨‍⚕️ **Administrator:** ' + m.text, 'bot');
+            if (el && el.setAttribute) el.setAttribute('data-mid', m.id);
+            history.push({ role: 'assistant', content: '[Administrator]: ' + m.text });
+          }
+        }
+      });
+      // 2. Смена режима ai/human
+      const { data: conv } = await sb.from('conversations').select('chat_mode').eq('id', sessionId).maybeSingle();
+      if (conv && conv.chat_mode && conv.chat_mode !== convStatus) {
+        const st = conv.chat_mode;
+        convStatus = st;
+        if (st === 'human') {
+          addMsg(lang === 'en' ? '_An administrator has joined the conversation._' : '_Un administrator s-a alăturat conversației._', 'bot');
+        } else if (st === 'ai') {
+          addMsg(lang === 'en' ? '_Diana (AI) is back with you._' : '_Diana (AI) a revenit la conversație._', 'bot');
+        }
+      }
+    } catch(e) { /* silent */ }
+  }, 2000);
+}
+
 function sbSubscribe() {
   if (sbChannel) { try { sb.removeChannel(sbChannel); } catch(e){} }
   sbChannel = sb.channel('conv-' + sessionId)
@@ -195,8 +238,11 @@ function sbSubscribe() {
         filter: 'conversation_id=eq.' + sessionId }, payload => {
       const m = payload.new;
       if (m.role === 'admin') {
+        if (m.id && m.id <= lastSeenMsgId) return; // уже показано polling-ом
+        if (m.id) lastSeenMsgId = m.id;
         removeTyping();
-        addMsg('👨‍⚕️ **Administrator:** ' + m.text, 'bot');
+        const el = addMsg('👨‍⚕️ **Administrator:** ' + m.text, 'bot');
+        if (el && el.setAttribute && m.id) el.setAttribute('data-mid', m.id);
         history.push({ role: 'assistant', content: '[Administrator]: ' + m.text });
       }
     })
@@ -392,6 +438,7 @@ function addMsg(text, role, extra) {
   row.appendChild(col);
   msgsEl.appendChild(row);
   msgsEl.scrollTop = msgsEl.scrollHeight;
+  return row;
   convMessages.push({ role, text, time: now() });
   // Save dialog even without booking
   try {
